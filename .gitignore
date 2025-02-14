@@ -9,3 +9,6 @@ venv/
 
 # macOS
 .DS_Store
+
+# ignore data files which are too large
+data/*
