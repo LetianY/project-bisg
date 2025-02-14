@@ -19,10 +19,11 @@ class BisgPredictor(ProxyPredictor):
         self.model = SurgeoModel()
 
     def inference(self, data: pd.DataFrame) -> pd.DataFrame:
-        TARGET_SURNAME_COLUMNS = ['white', 'black', 'api', 'native', 'multiple', 'hispanic']
+        RACE_COLS = ['white', 'black', 'api', 'native', 'multiple', 'hispanic']
         df = data.copy()
         prob_df = self.model.get_probabilities(names=df['surname'], geo_df=df['ztacs'])
-        df[TARGET_SURNAME_COLUMNS] = prob_df[TARGET_SURNAME_COLUMNS]
+        df[RACE_COLS] = prob_df[RACE_COLS]
+        df['pred_race'] = df[RACE_COLS].idxmax(axis=1).fillna("nan")
         return df
     
 class WeightEstimator(ProxyPredictor):

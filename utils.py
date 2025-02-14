@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
 
 from zip_codes import df_zip_crosswalk
 from surgeo.models.base_model import BaseModel
@@ -69,10 +71,33 @@ def clean_voter_data(df: pd.DataFrame, county_name: str='') -> pd.DataFrame:
     print("removing invalid records...")
     return county_df.dropna(subset=['surname', 'ztacs', 'party_cd', 'true_race'])
 
-def plot_voter_data(df: pd.DataFrame, column: str, **kwargs) -> None:
-    """Result evaluations."""
-    plt.hist(df[column], **kwargs)
+def plot_confusion_matrix(df, true_col='true_race', pred_col='pred_race', labels=None, party=None):
+    y_true = df[true_col]
+    y_pred = df[pred_col]
+
+    if labels is None:
+        labels = list(set(list(y_true.unique())+list(y_pred.unique())))  # ensure all classes are considered
+        print(labels)
+
+    # compute confusion matrix
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
+
+    # create a heatmap
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap="Blues", xticklabels=labels, yticklabels=labels)
+    
+    # labels and title
+    plt.xlabel("Predicted Labels")
+    plt.ylabel("True Labels")
+    plt.title(f"Confusion Matrix for Party {party}")
     plt.show()
+
+def plot_voter_data(df: pd.DataFrame) -> None:
+    """Result evaluations."""
+    PARTIES = df['party_cd'].unique()
+    for party in PARTIES:
+        party_df = df[df['party_cd']==party]
+        plot_confusion_matrix(df=party_df, true_col='true_race', pred_col='pred_race', party=party)
 
 
 
