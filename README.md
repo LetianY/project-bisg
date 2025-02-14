@@ -20,6 +20,6 @@ Write code (in python preferably) to approximate the racial composition of each 
 
 ## Questions to Confirm
 1. How to preprocess ZTAC and Surname? Need to normalize names and ztacs as Surgeo base model provides?
-2. Political party information only used in analysis stage when approximating the racial composition of each political party (DEM, REP, LIB, IND)? 
+2. Political party information only used in analysis stage when approximating the racial composition of each political party (DEM, REP, LIB, IND)? What is a good way to handle the predicted probabilities?sss
 3. Need to preprocess race to align with predicted results? Then do we need to normalize the predicted probabilities? How to handle races beyond the 6 Surgeo race categories?
-4. Weighted estimator uses voter info?
+4. Weighted estimator uses voter info? What is Yi? Party info?

@@ -2,13 +2,14 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, accuracy_score
 
 from zip_codes import df_zip_crosswalk
 from surgeo.models.base_model import BaseModel
 
 
 # configure constants
+RACE_COLS = ['white', 'black', 'api', 'native', 'multiple', 'hispanic']
 RACE_MAPPING = {
 'A': 'api',        # Asian
 'B': 'black',      # Black or African American
@@ -97,9 +98,44 @@ def plot_voter_data(df: pd.DataFrame) -> None:
     PARTIES = df['party_cd'].unique()
     for party in PARTIES:
         party_df = df[df['party_cd']==party]
+        print(f"Prediction accuracy for party {party}: ", accuracy_score(party_df['true_race'], party_df['pred_race']))
         plot_confusion_matrix(df=party_df, true_col='true_race', pred_col='pred_race', party=party)
 
+def plot_estimations(estimated: dict, true: dict, party: str) -> None:
+    assert estimated.keys() == true.keys(), "Both dictionaries must have the same keys."
 
+    est_values = [estimated[race] for race in RACE_COLS]
+    true_values = [true[race] for race in RACE_COLS]
 
+    x = np.arange(len(RACE_COLS))  # label locations
+    width = 0.35  # width of the bars
 
+    fig, ax = plt.subplots()
+    bars1 = ax.bar(x - width/2, est_values, width, label='Estimated')
+    bars2 = ax.bar(x + width/2, true_values, width, label='True')
+
+    ax.set_xlabel('Race')
+    ax.set_ylabel('Pr(Y=1|R=r)')
+    ax.set_title(f'Estimated vs. True Party ({party}) Distribution Given Race')
+    ax.set_xticks(x)
+    ax.set_xticklabels(RACE_COLS)
+    ax.legend()
+    plt.show()
+
+def weighted_estimator(df: pd.DataFrame, party):
+    df = df.copy()
+    df = df[(df['true_race'].isin(RACE_COLS))&(df['pred_race'].isin(RACE_COLS))]
+    
+    estimator_results = {}
+    true_results = {}
+    df[f'{party}_binary'] = np.where(df['party_cd']==party, 1, 0)
+    for race in RACE_COLS:
+        estimator = (df[race] * df[f'{party}_binary']).sum() / df[race].sum()
+        estimator_results[race] = estimator
+        true_results[race] =  df[df['true_race']==race][f'{party}_binary'].mean() # mu = Pr(Y=1|R=r)
+
+    print(f"Weighted estimation ({party}):", estimator_results)
+    print(f"True distribution ({party}):", true_results)
+
+    plot_estimations(estimated=estimator_results, true=true_results, party=party)
 
