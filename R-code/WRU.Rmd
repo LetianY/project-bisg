@@ -1,0 +1,85 @@
+---
+title: "DATA2050_WRU"
+author: "Yixun Kang"
+date: "2025-03-04"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Install packages
+
+Run `library(devtools)` first and then line 20. Then `library(wru)` and `library(zipWRUext2)`.
+
+```{r}
+library(devtools)
+library(wru)
+library(zipWRUext2)
+devtools::install_github("https://github.com/jcuriel-unc/zipWRUext", subdir="zipWRUext2")
+```
+
+```{r}
+library(dplyr)
+# What is the difference between county and county_code?
+# Randomly selected a county and rename the zcta column
+data_nc = readRDS("ga_voter_reg_cleanedwbisg.rds")
+data_county = data_nc %>% filter(county_code == 12) %>% 
+  select(race, surname, zcta5, state, county) %>% 
+  rename(zcta = zcta5)
+```
+
+## zipWRUext2
+
+```{r}
+data_zip = zip_wru(data_county, 
+                   state = "GEORGIA", 
+                   year1 = "2020",
+                   zip_col = "zcta", 
+                   surname_field = "surname", 
+                   type1 = "census")
+data_zip
+```
+
+## WRU
+
+```{r}
+Sys.setenv(CENSUS_API_KEY = "YOUR_CENSUS_API_KEY")
+data_wru_bisg = wru::predict_race(data_county, 
+                                  census.surname = TRUE, 
+                                  census.geo = "zcta", 
+                                  census.key = Sys.getenv("CENSUS_API_KEY"),
+                                  census.data = get_census_data(key = Sys.getenv("CENSUS_API_KEY"),
+                                                                states = "GA", 
+                                                                sex = FALSE,
+                                                                year = "2020",
+                                                                census.geo = "zcta",
+                                                                retry = 3,
+                                                                county.list = NULL),
+                                  year = "2020",
+                                  retry = 3,
+                                  model = "BISG")
+data_wru_bisg
+```
+
+```{r}
+data_wru_fbisg = wru::predict_race(data_county, 
+                                   census.surname = TRUE, 
+                                   census.geo = "zcta", 
+                                   census.key = Sys.getenv("CENSUS_API_KEY"),
+                                   census.data = get_census_data(key = Sys.getenv("CENSUS_API_KEY"),
+                                                                 states = "GA", 
+                                                                 sex = FALSE,
+                                                                 year = "2020",
+                                                                 census.geo = "zcta",
+                                                                 retry = 3,
+                                                                 county.list = NULL),
+                                   year = "2020",
+                                   retry = 3,
+                                   model = "fBISG")
+data_wru_fbisg
+```
+
+
+

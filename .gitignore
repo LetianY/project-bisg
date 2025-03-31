@@ -13,4 +13,7 @@ venv/
 # ignore data files which are too large
 data/*
 
+# ignore secrets
+secrets/*
+
 # ignore repository specific files
