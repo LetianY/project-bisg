@@ -24,7 +24,7 @@ devtools::install_github("https://github.com/jcuriel-unc/zipWRUext", subdir="zip
 library(dplyr)
 # What is the difference between county and county_code?
 # Randomly selected a county and rename the zcta column
-data_nc = readRDS("ga_voter_reg_cleanedwbisg.rds")
+data_nc = readRDS("../data/ga_voter_reg_cleanedwbisg.rds")
 data_county = data_nc %>% filter(county_code == 12) %>% 
   select(race, surname, zcta5, state, county) %>% 
   rename(zcta = zcta5)
