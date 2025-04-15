@@ -9,7 +9,7 @@ from surgeo.models.base_model import BaseModel
 
 
 # configure constants
-RACE_COLS = ['white', 'black', 'api', 'native', 'multiple', 'hispanic']
+RACE_COLS = ['white', 'black', 'api', 'native', 'multiple', 'hispanic', 'other']
 RACE_MAPPING = {
 'A': 'api',        # Asian
 'B': 'black',      # Black or African American
@@ -26,7 +26,7 @@ def load_voter_data_txt(file_path: str, delimiter: str = '\t', **kwargs) -> pd.D
     return pd.read_csv(file_path, delimiter=delimiter, **kwargs)
 
 def clean_voter_data(df: pd.DataFrame, county_name: str='') -> pd.DataFrame:
-    """Clean the voter data."""
+    """Clean the NC 2022 voter data."""
     # filter by county_name
     print("filtering by county_name...")
     if county_name in df['county_desc'].unique():
@@ -37,15 +37,31 @@ def clean_voter_data(df: pd.DataFrame, county_name: str='') -> pd.DataFrame:
     # all variables here: https://s3.amazonaws.com/dl.ncsbe.gov/data/layout_ncvoter.txt
     # we will only be using the following variables
     print("selecting columns...")
-    usecols = ['county_id', 'county_desc', 'voter_reg_num', 'last_name', 'zip_code',
-               'race_code', 'ethnic_code', 'party_cd', 'vtd_abbrv', 'vtd_desc']
+    usecols = ['county_id', 'county_desc', 'zip_code', 'ncid', 
+               'last_name', 'first_name', 'middle_name', 'race_code', 'party_cd']
     county_df = county_df[usecols]
+    county_df = county_df.rename(columns={
+        'last_name': 'surname', 
+        'first_name': 'first', 
+        'middle_name': 'middle',
+        })
+    county_df['state'] = 'NC'
 
     # clean surname
     print("cleaning surname...")
-    basemodel = BaseModel()
-    county_df['surname'] = county_df['last_name'].str.upper()
-    county_df['surname'] = basemodel._normalize_names(county_df['surname'])
+    # basemodel = BaseModel()
+    county_df['surname'] = county_df['surname'].str.upper()
+    # county_df['surname'] = basemodel._normalize_names(county_df['surname'])
+
+    # clean middle name
+    print("cleaning middle name...")
+    county_df['middle'] = county_df['middle'].str.upper()
+    # county_df['middle'] = basemodel._normalize_names(county_df['middle'])
+
+    # clean first name
+    print("cleaning first name...")
+    county_df['first'] = county_df['first'].str.upper()
+    # county_df['first'] = basemodel._normalize_names(county_df['first'])
 
     # clean ztac
     print("cleaning ztac...")
@@ -53,24 +69,19 @@ def clean_voter_data(df: pd.DataFrame, county_name: str='') -> pd.DataFrame:
         dataframe=county_df, 
         zip_field_name='zip_code', 
         year=2020,
-        zcta_field_name='ztacs',
+        zcta_field_name='zcta',
         use_postalcode_if_error=False,
         suppress_prints=False
         )
-    county_df['ztacs'] = county_df['ztacs'].str.zfill(5)
+    county_df['zcta'] = county_df['zcta'].str.zfill(5)
 
     # clean true race: map to Surgeo categories
     print("cleaning race...")
     county_df['true_race'] = county_df['race_code'].map(RACE_MAPPING)
 
-    # selct and rename columns
-    print("selecting and renaming columns...")
-    sel_cols = ['county_id', 'county_desc', 'voter_reg_num', 'surname', 'zip_code', 'ztacs', 'race_code', 'true_race', 'party_cd']
-    county_df = county_df[sel_cols]
-
     # remove invalid records
     print("removing invalid records...")
-    return county_df.dropna(subset=['surname', 'ztacs', 'party_cd', 'true_race'])
+    return county_df.dropna(subset=['surname', 'zcta', 'party_cd', 'true_race'])
 
 def plot_confusion_matrix(df, true_col='true_race', pred_col='pred_race', labels=None, party=None):
     y_true = df[true_col]

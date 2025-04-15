@@ -7,6 +7,7 @@ from rpy2.robjects.packages import importr
 from typing import Protocol
 from abc import ABC, abstractmethod
 from surgeo import SurgeoModel, BIFSGModel
+from references.proxies import ftBisg
 
 
 RACE_COLS = ['white', 'black', 'api', 'native', 'multiple', 'hispanic', 'other']
@@ -51,6 +52,9 @@ class SurgeoPredictor(ProxyPredictor):
         return df
 
 class WRUPredictor(ProxyPredictor):
+    """
+    This class is a wrapper around the WRU package and provides a method for race inference.
+    """
     def __init__(self, census_api_key=None):
         """
         Initialize WRU Model with R backend.
@@ -98,13 +102,16 @@ class WRUPredictor(ProxyPredictor):
         if 'zcta5' in df.columns and 'zcta' not in df.columns:
             df.rename(columns={'zcta5': 'zcta'}, inplace=True)
 
-        if 'ztacs' in df.columns and 'zcta' not in df.columns:
-            df['zcta'] = df['ztacs']
+        if 'zctas' in df.columns and 'zcta' not in df.columns:
+            df['zcta'] = df['zctas']
+
+        if 'zcta' in df.columns:
+            df['zcta'] = df['zcta'].str.zfill(5)
         
         # Ensure proper data types to avoid R coercion issues
         # Ensure surname is string type
         if 'surname' in df.columns:
-            df['surname'] = df['surname'].astype(str)
+            df['surname'] = df['surname'].str.upper()
         
         # Make sure any potential geographic identifiers are all strings
         geo_cols = ['county', 'tract', 'block', 'block_group', 'place', 'zcta']
@@ -185,15 +192,14 @@ class WRUPredictor(ProxyPredictor):
         if data is None:
             raise ValueError("Data must be provided")
         
-        df = data.copy()
+        # df = data.copy()
 
         # Prepare data for WRU
         r_df = self._prepare_data(data)
         
         # Get or retrieve cached census data
         print("Getting census data...")
-        if self.census_data is None:
-            self.census_data = self.get_census_data(state=state, year=year, census_geo=census_geo)
+        self.census_data = self.get_census_data(state=state, year=year, census_geo=census_geo)
         
         # Run WRU predict_race
         print("Predicting race...")
@@ -227,25 +233,46 @@ class WRUPredictor(ProxyPredictor):
             'pred.asi': 'api',
             'pred.oth': 'other',  # WRU has 'other' instead of 'multiple'
         }
-        
-        # Rename columns and select only probability columns
-        prob_cols = [col for col in result_df.columns if col.startswith('pred.')]
-        prob_df = result_df[prob_cols].rename(columns=column_map)
+        result_df = result_df.rename(columns=column_map)
 
         for race in RACE_COLS:
-            if race in prob_df.columns:
-                df[race] = prob_df[race]
-            else:
-                df[race] = 0.0
+            if race not in result_df.columns:
+                result_df[race] = 0.0
 
         # Ensure proper normalization
-        # sum_prob = prob_df[RACE_COLS].sum(axis=1)
+        # sum_prob = result_df[RACE_COLS].sum(axis=1)
         # for race in RACE_COLS:
-        #     if race in prob_df.columns:
-        #         prob_df[race] = prob_df[race] / sum_prob
+        #     if race in result_df.columns:
+        #         result_df[race] = result_df[race] / sum_prob
 
-        return df
+        return result_df
+    
+class ZipWRUextPredictor(ProxyPredictor):
+    """
+    A wrapper class around the WRU extention package: zipWRUext.
+    """
+
     
 class cBISGPredictor(ProxyPredictor):
-    def __init__(self):
+    """
+    This class implements the cBISG proxy estimation method.
+    The estimation method is based on the following equation:
+        Pr[R∣G,S,Y] ∝ Pr[R∣G,Y]⋅Pr[S∣R]
+    
+    where:
+        - R is race
+        - G is geographic information
+        - S is surname
+        - Y is contexual information (e.g., party affiliation)
+    
+    The original paper is: https://arxiv.org/pdf/2409.01984
+    "Observing Context Improves Disparity Estimation when Race is Unobserved" by Kweku Kwegyir-Aggrey et al.
+
+    This class is a wrapper around the cBISG model and provides a method for inference on a given DataFrame.
+    Original repo: https://github.com/kwekuka/proxies/
+    """
+    def __init__(self, census_api_key):
+        self.model = ftBisg()
+
+    def inference(self, data: pd.DataFrame) -> pd.DataFrame:
         pass
