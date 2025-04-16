@@ -173,7 +173,8 @@ class WRUPredictor(ProxyPredictor):
             names_to_use="surname",
             impute_missing=False, 
             skip_bad_geos=True, 
-            use_counties=False
+            use_counties=False,
+            reload_census=True
         ) -> pd.DataFrame:
         """
         Get race probabilities using WRU's predict_race function.
@@ -193,6 +194,7 @@ class WRUPredictor(ProxyPredictor):
             impute_missing (bool, optional): Whether to impute missing values (default: False).
             skip_bad_geos (bool, optional): Whether to skip any geolocations not present in the Census data (default: True).
             use_counties (bool, optional): Whether to filter Census data by counties available in the data (default: False).
+            reload_census (bool, optional): Whether to reload census data (default: True).
 
         Returns:
             pd.DataFrame: DataFrame with race probabilities, including the estimated probability for each race category.
@@ -207,9 +209,10 @@ class WRUPredictor(ProxyPredictor):
         r_df = self._prepare_data(data)
         
         # Get or retrieve cached census data
-        print("Getting census data...")
-        self.census_data = self.get_census_data(state=state, year=year, census_geo=census_geo)
-        
+        if reload_census or self.census_data is None:
+            print("Getting census data...")
+            self.census_data = self.get_census_data(state=state, year=year, census_geo=census_geo)
+            
         # Run WRU predict_race
         print("Predicting race...")
         result = self.wru.predict_race(
