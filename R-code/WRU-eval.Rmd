@@ -1,0 +1,258 @@
+---
+title: "DATA2050_WRU"
+author: "Yixun Kang"
+date: "2025-03-04"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Install packages
+
+Run `library(devtools)` first and then line 20. Then `library(wru)` and `library(zipWRUext2)`.
+
+```{r, message=FALSE}
+library(devtools)
+library(wru)
+#library(zipWRUext2)
+#devtools::install_github("https://github.com/jcuriel-unc/zipWRUext", subdir = "zipWRUext2")
+library(MLmetrics)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(gridExtra)
+```
+
+## Data Preprocessing
+
+```{r}
+data_nc = readRDS("nc_voter_reg_cleanedwbisg.rds")
+table(data_nc$race_code)
+data_nc$race_code = ifelse(data_nc$race_code %in% c("A", "I"), "API", data_nc$race_code)
+data_nc$race_code = ifelse(data_nc$race_code %in% c("M", "O", "U"), "O", data_nc$race_code)
+data_nc$race_code = ifelse(data_nc$ethnic_desc == "HISPANIC or LATINO", "H", data_nc$race_code)
+data_nc = data_nc[data_nc$race_code != "", ]
+table(data_nc$race_code)
+
+data_nc1 = data_nc %>% dplyr::select(zcta5, surname, race_code, state, party_desc) %>% rename(zcta = zcta5)
+```
+
+## WRU: BISG
+
+```{r}
+Sys.setenv(CENSUS_API_KEY = "f22603397c6685d1c71d15779b942c97c0624004")
+wru_bisg = wru::predict_race(data_nc1, 
+                             census.surname = TRUE, 
+                             census.geo = "zcta", 
+                             census.key = Sys.getenv("CENSUS_API_KEY"),
+                             census.data = get_census_data(key = Sys.getenv("CENSUS_API_KEY"),
+                                                           states = "GA", 
+                                                           sex = FALSE,
+                                                           year = "2020",
+                                                           census.geo = "zcta",
+                                                           retry = 3,
+                                                           county.list = NULL),
+                             year = "2020",
+                             retry = 3,
+                             skip_bad_geos = TRUE,
+                             model = "BISG")
+head(wru_bisg)
+```
+
+## Weighted Estimator
+
+```{r}
+weighted_estimator = function(df, outcome, outcome_value, race_col = NULL, races = NULL, type) {
+  outcome_mask = df[[outcome]] == outcome_value
+  if (type == "pred") {
+    df_race = df[, races]
+    df_outcome = df_race[outcome_mask, ]
+    n = colSums(df_outcome)
+    d = colSums(df_race)
+    we = n / d
+  } else if (type == "actual") {
+    df_outcome = df[outcome_mask, ]
+    n = table(df_outcome[[race_col]])
+    d = table(df[[race_col]])
+    we = n / d
+  } else {
+    stop("Must have a type")
+  }
+  return(we)
+}
+```
+
+```{r}
+# Predicted weighted estimators
+outcome_values = unique(wru_bisg$party_desc)
+races = c("pred.whi", "pred.bla", "pred.his", "pred.asi", "pred.oth")
+pred_wes = data.frame()
+for (party in outcome_values) {
+  we = weighted_estimator(wru_bisg, "party_desc", party, NULL, races, "pred")
+  result = data.frame(party = party, race = names(we), weighted_estimator = as.numeric(we))
+  pred_wes = rbind(pred_wes, result)
+}
+pred_wes
+# Predicted disparities
+pred_disparities = data.frame()
+for (p in unique(pred_wes$party)) {
+  df_party = subset(pred_wes, party == p)
+  pred_whi = df_party$weighted_estimator[df_party$race == "pred.whi"]
+  for (i in 1:nrow(df_party)) {
+    race = df_party$race[i]
+    if (race != "pred.whi") {
+      disparity = pred_whi - df_party$weighted_estimator[i]
+      pred_disparities = rbind(pred_disparities, data.frame(party = p, race = race, disparity = disparity))
+    }
+  }
+}
+pred_disparities
+```
+
+```{r}
+# Actual weighted estimators
+actual_wes = data.frame()
+for (party in outcome_values) {
+  we = weighted_estimator(wru_bisg, "party_desc", party, "race_code", NULL, "actual")
+  result = data.frame(party = party, race = names(we), weighted_estimator = as.numeric(we))
+  actual_wes = rbind(actual_wes, result)
+}
+actual_wes
+# Actual disparities
+actual_disparities = data.frame()
+for (p in unique(actual_wes$party)) {
+  df_party = subset(actual_wes, party == p)
+  actual_whi = df_party$weighted_estimator[df_party$race == "W"]
+  for (i in 1:nrow(df_party)) {
+    race = df_party$race[i]
+    if (race != "W") {
+      disparity = actual_whi - df_party$weighted_estimator[i]
+      actual_disparities = rbind(actual_disparities, data.frame(party = p, race = race, disparity = disparity))
+    }
+  }
+}
+actual_disparities
+```
+
+```{r}
+# Visualization
+pred_disparities$race = recode(pred_disparities$race,
+                               "pred.whi" = "W",
+                               "pred.bla" = "B",
+                               "pred.his" = "H",
+                               "pred.oth" = "O",
+                               "pred.asi" = "API")
+merged_disparities = left_join(pred_disparities, actual_disparities,
+                               by = c("party", "race"),
+                               suffix = c("_pred", "_actual"))
+long_disparities = merged_disparities %>% pivot_longer(cols = c("disparity_pred", "disparity_actual"),
+                                                       names_to = "type",
+                                                       values_to = "disparity") %>% 
+  mutate(type = recode(type, "disparity_pred" = "Predicted", "disparity_actual" = "Actual"))
+parties = unique(merged_disparities$party)
+plot_list = list()
+for (i in seq_along(parties)) {
+  party_name = parties[i]
+  df_plot = filter(long_disparities, party == party_name)
+  p = ggplot(df_plot, aes(x = disparity, y = race, color = type)) + 
+    geom_point(size = 1.5) + 
+    labs(title = party_name, x = "Disparities", y = "Race Labels", color = "Type")
+  plot_list[[i]] = p
+}
+grid.arrange(grobs = plot_list, ncol = 2)
+```
+
+
+## zipWRUext2
+
+```{r}
+#data_zip = zip_wru(data_county, 
+#                   state = "GEORGIA", 
+#                   year1 = "2020",
+#                   zip_col = "zcta", 
+#                   surname_field = "surname", 
+#                   type1 = "census")
+#data_zip
+#y_true = recode(data_zip$race,
+#                "WH" = "whi",
+#                "BH" = "bla",
+#                "AP" = "asi",
+#                "HP" = "his",
+#                "OT" = "oth")
+#y_true = factor(y_true, levels = c("whi", "bla", "his", "asi", "oth"))
+#y_pred = as.matrix(data_zip[, c("pred.whi", "pred.bla", "pred.his", "pred.asi", "pred.oth")])
+#round(MultiLogLoss(y_pred = y_pred, y_true = y_true), 3)
+```
+
+## WRU
+
+```{r}
+#Sys.setenv(CENSUS_API_KEY = "f22603397c6685d1c71d15779b942c97c0624004")
+#data_wru_bisg = wru::predict_race(data_county, 
+#                                  census.surname = TRUE, 
+#                                  census.geo = "zcta", 
+#                                  census.key = Sys.getenv("CENSUS_API_KEY"),
+#                                  census.data = get_census_data(key = Sys.getenv("CENSUS_API_KEY"),
+#                                                                states = "GA", 
+#                                                                sex = FALSE,
+#                                                                year = "2020",
+#                                                                census.geo = "zcta",
+#                                                                retry = 3,
+#                                                                county.list = NULL),
+#                                  year = "2020",
+#                                  retry = 3,
+#                                  model = "BISG")
+#data_wru_bisg
+#y_true = recode(data_wru_bisg$race,
+#                "WH" = "whi",
+#                "BH" = "bla",
+#                "AP" = "asi",
+#                "HP" = "his",
+#                "OT" = "oth")
+#y_true = factor(y_true, levels = c("whi", "bla", "his", "asi", "oth"))
+#y_pred = as.matrix(data_wru_bisg[, c("pred.whi", "pred.bla", "pred.his", "pred.asi", "pred.oth")])
+#round(MultiLogLoss(y_pred = y_pred, y_true = y_true), 3)
+```
+
+```{r}
+# Using threshold to assign race for BISG in WRU
+#library(tidyr)
+#data_wru_bisg %>% pivot_longer(cols = starts_with("pred."), names_to = "race_pred", values_to = "prob")
+#
+#%>% 
+#  group_by(across(-c(race_pred, prob))) %>% 
+#  slice_max(order_by = prob, n = 1, with_ties = FALSE) %>% 
+#  ungroup() %>% 
+#  mutate(assigned_race = ifelse(prob > 0.75, sub("pred\\.", "", race_pred), NA))
+```
+
+```{r}
+#data_wru_fbisg = wru::predict_race(data_county, 
+#                                   census.surname = TRUE, 
+#                                   census.geo = "zcta", 
+#                                   census.key = Sys.getenv("CENSUS_API_KEY"),
+#                                   census.data = get_census_data(key = Sys.getenv("CENSUS_API_KEY"),
+#                                                                 states = "GA", 
+#                                                                 sex = FALSE,
+#                                                                 year = "2020",
+#                                                                 census.geo = "zcta",
+#                                                                 retry = 3,
+#                                                                 county.list = NULL),
+#                                   year = "2020",
+#                                   retry = 3,
+#                                   model = "fBISG")
+#data_wru_fbisg
+#y_true = recode(data_wru_fbisg$race,
+#                "WH" = "whi",
+#                "BH" = "bla",
+#                "AP" = "asi",
+#                "HP" = "his",
+#                "OT" = "oth")
+#y_true = factor(y_true, levels = c("whi", "bla", "his", "asi", "oth"))
+#y_pred = as.matrix(data_wru_fbisg[, c("pred.whi", "pred.bla", "pred.his", "pred.asi", "pred.oth")])
+#round(MultiLogLoss(y_pred = y_pred, y_true = y_true), 3)
+```
+
+
