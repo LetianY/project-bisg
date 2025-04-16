@@ -148,5 +148,15 @@ def weighted_estimator(df: pd.DataFrame, party):
     print(f"Weighted estimation ({party}):", estimator_results)
     print(f"True distribution ({party}):", true_results)
 
-    plot_estimations(estimated=estimator_results, true=true_results, party=party)
+    # plot_estimations(estimated=estimator_results, true=true_results, party=party)
+    return estimator_results, true_results
+
+def weighted_estimator_all(df: pd.DataFrame):
+    """Calculate the weighted estimator for all parties."""
+    rows_ = []
+    PARTIES = df['party_cd'].unique()
+    results = {}
+    for party in PARTIES:
+        results[party] = weighted_estimator(df, party)
+    return results
 

@@ -25,6 +25,9 @@ library(dplyr)
 # What is the difference between county and county_code?
 # Randomly selected a county and rename the zcta column
 data_nc = readRDS("../data/ga_voter_reg_cleanedwbisg.rds")
+data_all = data_nc %>% 
+  select(race, surname, zcta5, state, county) %>% 
+  rename(zcta = zcta5)
 data_county = data_nc %>% filter(county_code == 12) %>% 
   select(race, surname, zcta5, state, county) %>% 
   rename(zcta = zcta5)
@@ -62,6 +65,28 @@ data_wru_bisg = wru::predict_race(data_county,
                                   model = "BISG")
 data_wru_bisg
 ```
+```{r}
+data_wru_bisg_all = wru::predict_race(data_all, 
+                                  census.surname = TRUE, 
+                                  census.geo = "zcta", 
+                                  census.key = Sys.getenv("CENSUS_API_KEY"),
+                                  census.data = get_census_data(key = Sys.getenv("CENSUS_API_KEY"),
+                                                                states = "GA", 
+                                                                sex = FALSE,
+                                                                year = "2020",
+                                                                census.geo = "zcta",
+                                                                retry = 3,
+                                                                county.list = NULL),
+                                  year = "2020",
+                                  skip_bad_geos = TRUE,
+                                  retry = 3,
+                                  model = "BISG")
+
+data_wru_bisg_all %>% filter(county == '023')
+
+data_wru_bisg_all
+```
+
 
 ```{r}
 data_wru_fbisg = wru::predict_race(data_county, 
