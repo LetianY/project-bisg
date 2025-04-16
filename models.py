@@ -1,16 +1,18 @@
+import os
+import sys
 import pandas as pd
 import numpy as np
-import os
 import rpy2.robjects as ro
+from const import constants
 from rpy2.robjects import pandas2ri
 from rpy2.robjects.packages import importr
 from typing import Protocol
 from abc import ABC, abstractmethod
 from surgeo import SurgeoModel, BIFSGModel
-from references.proxies import ftBisg
+from references.proxies.src.proxies import ftBisg
 
-
-RACE_COLS = ['white', 'black', 'api', 'native', 'multiple', 'hispanic', 'other']
+# use WRU race columns
+RACE_COLS = constants.RACE_COLS_WRU
 
 class ProxyPredictor(ABC):
     @abstractmethod
@@ -20,6 +22,13 @@ class ProxyPredictor(ABC):
     @abstractmethod
     def inference(self, data: pd.DataFrame) -> pd.DataFrame:
         pass
+
+    def normalize_prediction(self, data: pd.DataFrame) -> pd.DataFrame:
+        sum_prob = data[RACE_COLS].sum(axis=1)
+        for race in RACE_COLS:
+            if race in data.columns:
+                data[race] = data[race] / sum_prob
+        return data
 
     def generate_race_label(self, data: pd.DataFrame) -> pd.DataFrame:
         data['pred_race'] = data[RACE_COLS].idxmax(axis=1).fillna("unknown")
@@ -239,12 +248,6 @@ class WRUPredictor(ProxyPredictor):
             if race not in result_df.columns:
                 result_df[race] = 0.0
 
-        # Ensure proper normalization
-        # sum_prob = result_df[RACE_COLS].sum(axis=1)
-        # for race in RACE_COLS:
-        #     if race in result_df.columns:
-        #         result_df[race] = result_df[race] / sum_prob
-
         return result_df
     
 class ZipWRUextPredictor(ProxyPredictor):
@@ -272,7 +275,8 @@ class cBISGPredictor(ProxyPredictor):
     Original repo: https://github.com/kwekuka/proxies/
     """
     def __init__(self, census_api_key):
-        self.model = ftBisg()
+        # self.model = ftBisg(races=None)
+        pass
 
     def inference(self, data: pd.DataFrame) -> pd.DataFrame:
         pass

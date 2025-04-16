@@ -3,23 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, accuracy_score
-
+from const import constants
 from zip_codes import df_zip_crosswalk
 from surgeo.models.base_model import BaseModel
 
 
-# configure constants
-RACE_COLS = ['white', 'black', 'api', 'native', 'multiple', 'hispanic', 'other']
-RACE_MAPPING = {
-'A': 'api',        # Asian
-'B': 'black',      # Black or African American
-'I': 'native',     # American Indian or Alaska Native
-'M': 'multiple',   # Two or More Races
-'O': 'other',      # Other - not mappable
-'P': 'api',        # Native Hawaiian or Pacific Islander
-'U': 'unknown',    # Undesignated - not mappable
-'W': 'white'       # White
-}
+# configure constants: WRU
+RACE_COLS = constants.RACE_COLS_WRU
+RACE_MAPPING = constants.RACE_MAPPING_WRU
 
 def load_voter_data_txt(file_path: str, delimiter: str = '\t', **kwargs) -> pd.DataFrame:
     """Load a .txt file and return a pandas DataFrame."""
@@ -37,8 +28,8 @@ def clean_voter_data(df: pd.DataFrame, county_name: str='') -> pd.DataFrame:
     # all variables here: https://s3.amazonaws.com/dl.ncsbe.gov/data/layout_ncvoter.txt
     # we will only be using the following variables
     print("selecting columns...")
-    usecols = ['county_id', 'county_desc', 'zip_code', 'ncid', 
-               'last_name', 'first_name', 'middle_name', 'race_code', 'party_cd']
+    usecols = ['county_id', 'county_desc', 'zip_code', 'ncid', 'last_name', 'first_name', 
+               'middle_name', 'race_code', 'ethnic_code', 'party_cd']
     county_df = county_df[usecols]
     county_df = county_df.rename(columns={
         'last_name': 'surname', 
@@ -46,6 +37,7 @@ def clean_voter_data(df: pd.DataFrame, county_name: str='') -> pd.DataFrame:
         'middle_name': 'middle',
         })
     county_df['state'] = 'NC'
+    county_df['ethnic_code'] = county_df['ethnic_code'].astype(str)
 
     # clean surname
     print("cleaning surname...")
@@ -75,9 +67,17 @@ def clean_voter_data(df: pd.DataFrame, county_name: str='') -> pd.DataFrame:
         )
     county_df['zcta'] = county_df['zcta'].str.zfill(5)
 
-    # clean true race: map to Surgeo categories
+    # clean true race: map to Surgeo/WRU categories
+    """
+    Set the race value to hispanic when ethnicity is hispanic 
+
+    HL                 HISPANIC or LATINO
+    NL                 NOT HISPANIC or NOT LATINO
+    UN                 UNDESIGNATED
+    """
     print("cleaning race...")
     county_df['true_race'] = county_df['race_code'].map(RACE_MAPPING)
+    county_df.loc[county_df['ethnic_code'] == "HL", 'true_race'] = 'hispanic'
 
     # remove invalid records
     print("removing invalid records...")
