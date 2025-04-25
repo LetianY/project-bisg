@@ -238,7 +238,7 @@ def reverse_zcta_crosswalk(
                     "No zips will be returned. Please double check your entry and try again.",
                 )
             zips = []
-
+    # print("zips", zips)
     return zips
 
 
@@ -278,13 +278,14 @@ def df_reverse_zcta_crosswalk(
             )
         )
         # Format the input ZCTA field for output.
-        outdf[zcta_field_name] = (
-            outdf[zcta_field_name]
-            .fillna("0")
-            .astype(int)
-            .astype(str)
-            .apply(lambda x: zip_code_formatter(x))
-        )
+        # outdf[zcta_field_name] = (
+        #     outdf[zcta_field_name]
+        #     .fillna("0")
+        #     .astype(int)
+        #     .astype(str)
+        #     .apply(lambda x: zip_code_formatter(x))
+        # )
+        # Fix: outdf[zip_field_name] will be a list of zip codes.
         return outdf
 
 

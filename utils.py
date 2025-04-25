@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, accuracy_score
 from const import constants
-from zip_codes import df_zip_crosswalk
+from zip_codes import df_zip_crosswalk, df_reverse_zcta_crosswalk
 from surgeo.models.base_model import BaseModel
 
 
@@ -83,7 +83,22 @@ def clean_voter_data(df: pd.DataFrame, county_name: str='') -> pd.DataFrame:
     print("removing invalid records...")
     return county_df.dropna(subset=['surname', 'zcta', 'party_cd', 'true_race'])
 
-def plot_confusion_matrix(df, true_col='true_race', pred_col='pred_race', labels=None, party=None):
+# from zip_codes import df_reverse_zcta_crosswalk
+def map_zcta_to_zip(df: pd.DataFrame, zcta_col: str='perturbed_zcta', zip_col: str='perturbed_zip_code') -> pd.DataFrame:
+    print("mapping perturbed ztac back to zipcodes...")
+    df = df_reverse_zcta_crosswalk(
+        dataframe=df, 
+        zcta_field_name=zcta_col, 
+        year_zip=2020,
+        zip_field_name=zip_col,
+        use_zcta_if_error=True,
+        suppress_prints=False
+        )
+    # df[zip_col] = df[zip_col].apply(lambda x: str(x[0]) if x else '')
+    # df[zip_col] = df[zip_col].str.zfill(5)
+    return df
+
+def plot_confusion_matrix(df, true_col='true_race', pred_col='pred_race', labels=None, party='', method=''):
     y_true = df[true_col]
     y_pred = df[pred_col]
 
@@ -101,7 +116,7 @@ def plot_confusion_matrix(df, true_col='true_race', pred_col='pred_race', labels
     # labels and title
     plt.xlabel("Predicted Labels")
     plt.ylabel("True Labels")
-    plt.title(f"Confusion Matrix for Party {party}")
+    plt.title(f"Confusion Matrix for Party {party} using {method}")
     plt.show()
 
 def plot_voter_data(df: pd.DataFrame) -> None:
@@ -150,13 +165,4 @@ def weighted_estimator(df: pd.DataFrame, party):
 
     # plot_estimations(estimated=estimator_results, true=true_results, party=party)
     return estimator_results, true_results
-
-def weighted_estimator_all(df: pd.DataFrame):
-    """Calculate the weighted estimator for all parties."""
-    rows_ = []
-    PARTIES = df['party_cd'].unique()
-    results = {}
-    for party in PARTIES:
-        results[party] = weighted_estimator(df, party)
-    return results
 
