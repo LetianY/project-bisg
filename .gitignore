@@ -6,12 +6,14 @@ env/
 .env
 venv/
 .venv
+references/zip-codes-perturbance/bisg_env/*
 
 # macOS
 .DS_Store
 
 # ignore data files which are too large
 data/*
+references/zip-codes-perturbance/zip_to_zip_distances.npy
 
 # ignore secrets
 secrets/*
