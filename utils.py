@@ -83,7 +83,6 @@ def clean_voter_data(df: pd.DataFrame, county_name: str='') -> pd.DataFrame:
     print("removing invalid records...")
     return county_df.dropna(subset=['surname', 'zcta', 'party_cd', 'true_race'])
 
-# from zip_codes import df_reverse_zcta_crosswalk
 def map_zcta_to_zip(df: pd.DataFrame, zcta_col: str='perturbed_zcta', zip_col: str='perturbed_zip_code') -> pd.DataFrame:
     print("mapping perturbed ztac back to zipcodes...")
     df = df_reverse_zcta_crosswalk(
@@ -94,9 +93,12 @@ def map_zcta_to_zip(df: pd.DataFrame, zcta_col: str='perturbed_zcta', zip_col: s
         use_zcta_if_error=True,
         suppress_prints=False
         )
-    # df[zip_col] = df[zip_col].apply(lambda x: str(x[0]) if x else '')
-    # df[zip_col] = df[zip_col].str.zfill(5)
+    df[zip_col] = df[zip_col].apply(lambda x: str(x[0]) if x else '')
+    df[zip_col] = df[zip_col].str.zfill(5)
     return df
+
+def perturb_surname(df: pd.DataFrame, surname_col: str='surname', perturbation_rate: float=0.1, random_seeds=1) -> pd.DataFrame:
+    pass
 
 def plot_confusion_matrix(df, true_col='true_race', pred_col='pred_race', labels=None, party='', method=''):
     y_true = df[true_col]
@@ -166,3 +168,38 @@ def weighted_estimator(df: pd.DataFrame, party):
     # plot_estimations(estimated=estimator_results, true=true_results, party=party)
     return estimator_results, true_results
 
+def add_noise_to_surnames(df, alpha=0.05, noise_str='xyz', seed=None):
+    if seed is not None:
+        np.random.seed(seed)
+
+    n_samples = len(df)
+    n_perturb = int(alpha * n_samples)
+    
+    indices_to_perturb = np.random.choice(df.index, size=n_perturb, replace=False)
+    df.loc[indices_to_perturb, 'surname'] = df.loc[indices_to_perturb, 'surname'] + noise_str
+    return df
+
+def compute_ece(y_true, y_probs, n_bins=10):
+    """
+    Compute the Expected Calibration Error (ECE) for a multi-class classification problem.
+    """ 
+    class_names = ['white', 'black', 'hispanic', 'api', 'other']
+    true_labels = np.array([class_names.index(label) for label in y_true])
+
+    confidences = np.max(y_probs, axis=1)
+    predictions = np.argmax(y_probs, axis=1)
+    correct = (predictions == true_labels).astype(float)
+
+    bins = np.linspace(0.0, 1.0, n_bins + 1)
+    bin_indices = np.digitize(confidences, bins) - 1
+
+    ece = 0.0
+    for i in range(n_bins):
+        mask = (bin_indices == i)
+        bin_size = np.sum(mask)
+        if bin_size > 0:
+            bin_confidence = confidences[mask].mean()
+            bin_accuracy = correct[mask].mean()
+            ece += np.abs(bin_confidence - bin_accuracy) * (bin_size / len(y_true))
+
+    return ece
