@@ -98,9 +98,6 @@ def map_zcta_to_zip(df: pd.DataFrame, zcta_col: str='perturbed_zcta', zip_col: s
     df[zip_col] = df[zip_col].str.zfill(5)
     return df
 
-def perturb_surname(df: pd.DataFrame, surname_col: str='surname', perturbation_rate: float=0.1, random_seeds=1) -> pd.DataFrame:
-    pass
-
 def plot_confusion_matrix(df, true_col='true_race', pred_col='pred_race', labels=None, party='', method=''):
     y_true = df[true_col]
     y_pred = df[pred_col]
@@ -181,11 +178,18 @@ def add_noise_to_surnames(df, alpha=0.05, noise_str='xyz', seed=None):
     return df
 
 def get_zip_in_range(zcta, zctas, distances, dist_min, dist_max):
+    """
+    Refer to BISG playground notebook (reference/zip-codes-perturbation) for the details of this function.
+    This function is used to get a random zip code in the range of dist_min and dist_max from the given zcta.
+    """
     index = zctas.index(zcta)
     (distances[index, :] >= dist_min) & ((distances[index, :] <= dist_max))
     return zctas[np.random.choice(np.nonzero((distances[index, :] >= dist_min) & (distances[index, :] <= dist_max))[0], 1)[0]]
 
 def get_zip_with_error(zcta, zctas, distances, err_distances, err_probs):
+    """
+    Refer to BISG playground notebook (reference/zip-codes-perturbation) for the details of this function. 
+    """
     dist_max_idx = np.random.choice(np.arange(len(err_distances)), p=err_probs)
     dist_max = err_distances[dist_max_idx]
     if dist_max_idx == 0:
