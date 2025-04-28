@@ -1,5 +1,6 @@
 import os
 import sys
+import requests
 import pandas as pd
 import numpy as np
 import rpy2.robjects as ro
@@ -10,6 +11,7 @@ from typing import Protocol
 from abc import ABC, abstractmethod
 from surgeo import SurgeoModel, BIFSGModel
 from references.proxies.src.proxies import ftBisg
+from references.proxies.src.datasets import Census
 
 # use WRU race columns
 RACE_COLS = constants.RACE_COLS_WRU
@@ -257,7 +259,6 @@ class ZipWRUextPredictor(ProxyPredictor):
     """
     A wrapper class around the WRU extention package: zipWRUext.
     """
-
     
 class cBISGPredictor(ProxyPredictor):
     """
@@ -277,9 +278,20 @@ class cBISGPredictor(ProxyPredictor):
     This class is a wrapper around the cBISG model and provides a method for inference on a given DataFrame.
     Original repo: https://github.com/kwekuka/proxies/
     """
-    def __init__(self, census_api_key):
-        # self.model = ftBisg(races=None)
-        pass
+    def __init__(self, census_api_key: str = None):
+        races = ["white", "black", "hispanic", "api"]
+        census = Census(api_key=census_api_key, races=races)
+        self.model = ftBisg(races=races, census=census)
+
+    def train(self, data, outcome, target, eta) -> None:
+        """
+        Train the cBISG model on the provided data.
+        
+        Args:
+            data (pd.DataFrame): DataFrame containing the training data.
+        """
+        self.model.train(data=data, outcome=outcome, target=target, eta=eta)
 
     def inference(self, data: pd.DataFrame) -> pd.DataFrame:
-        pass
+        result = self.model.inference(data=data)
+        return result
