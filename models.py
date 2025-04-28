@@ -39,6 +39,10 @@ class ProxyPredictor(ABC):
 class SurgeoPredictor(ProxyPredictor):
     """
     This class is a wrapper around the SurgeoModel and provides a method for inference on a given DataFrame.
+    Note: Surgeo is only trained on 2010 census data.
+
+    Github repo:
+    https://github.com/theonaunheim/surgeo
     """
     def __init__(self):
         self.model = SurgeoModel()
@@ -65,6 +69,9 @@ class SurgeoPredictor(ProxyPredictor):
 class WRUPredictor(ProxyPredictor):
     """
     This class is a wrapper around the WRU package and provides a method for race inference.
+
+    Github repo:
+    https://github.com/kosukeimai/wru
     """
     def __init__(self, census_api_key=None):
         """
@@ -258,7 +265,127 @@ class WRUPredictor(ProxyPredictor):
 class ZipWRUextPredictor(ProxyPredictor):
     """
     A wrapper class around the WRU extention package: zipWRUext.
+
+    Note: For census zcta, the module only works with 2010 census data.
+    This package acts as an extension to the WRU package by Imai and Khanna (2016) in performing 
+    Bayesian Inference with Surname and Geography (BISG). The package does this by drawing upon 
+    ZIP code Tabulation Area (ZCTA) -- or other user provided data -- tabulated demographics from 
+    the US 2010 Census and American Community Survey (ACS) from 2011 -- 2021. This information is 
+    stored in the package as an internal data frame for the package, ``zip_all_census2", which 
+    has the relevant populations and demographics for each ZIP code by state. Importantly, the 
+    r_whi, r_bla, r_his, r_asi, and r_oth contain the probabilities that a voter lives in a 
+    ZCTA if they are of a given race, i.e. pr(race | ZCTA). These in combination with the 
+    surname2010 dictionary provided by wru can in turn be used to identify the joint probabilities t
+    hat an individual is of a given race. The following is a guide on how to use.
+
+    If you want to use the zipWRUext package, you need to install it first.
+    devtools::install_github("https://github.com/jcuriel-unc/zipWRUext", subdir="zipWRUext2")
+
+    Github repo:
+    https://github.com/jcuriel-unc/zipWRUext
+    
+    
+
     """
+    def __init__(self):
+        """
+        Initialize ZipWRUext Model with R backend.
+        """
+        # Initialize R environment
+        pandas2ri.activate()
+        
+        # Import R packages
+        self.zipwruext = importr('zipWRUext2')
+
+    def _prepare_data(self, data: pd.DataFrame, surname_field: str = 'surname', zip_col: str = 'zcta'):
+        """
+        Prepare the input dataframe for ZipWRUext processing.
+        
+        Args:
+            data (pd.DataFrame): Input data containing surname and zip code columns
+            surname_field (str): Name of the surname column
+            zip_col (str): Name of the zip code column
+            
+        Returns:
+            ro.vectors.DataFrame: R dataframe prepared for ZipWRUext
+        """
+        df = data.copy()
+        
+        if surname_field in df.columns:
+            df[surname_field] = df[surname_field].str.upper()
+        
+        if zip_col in df.columns:
+            df[zip_col] = df[zip_col].astype(str).str.zfill(5)
+        
+        r_df = pandas2ri.py2rpy(df)
+        del df
+        
+        return r_df
+    
+    def inference(
+            self, 
+            data: pd.DataFrame, 
+            state: str = "NORTH CAROLINA",
+            year1: str = "2010",
+            zip_col: str = "zcta", 
+            surname_field: str = "surname", 
+            type1: str = "census"
+        ) -> pd.DataFrame:
+        """
+        Get race probabilities using zipWRUext's zip_wru function.
+        
+        Args:
+            data (pd.DataFrame): DataFrame with required columns.
+            state (str): State name in CAPITAL letters (e.g., "NORTH CAROLINA", "WISCONSIN", etc.)
+            year1 (str): Year of data (2010 for census, 2011 to 2021 for ACS)
+            zip_col (str): Name of the zip code column
+            surname_field (str): Name of the surname column
+            type1 (str): Type of data, either "census" or "acs"
+            
+        Returns:
+            pd.DataFrame: DataFrame with added race probability columns
+        """
+        print(f"Running zipWRUext with state={state}, year={year1}, type={type1}")
+        
+        # Prepare data for zipWRUext
+        r_df = self._prepare_data(data, surname_field, zip_col)
+        
+        # Run zip_wru function
+        result = self.zipwruext.zip_wru(
+            dataframe1=r_df,
+            state=state,
+            year1=year1,
+            zip_col=zip_col,
+            surname_field=surname_field,
+            type1=type1
+        )
+        
+        # Convert R result to pandas
+        result_df = pandas2ri.rpy2py(result)
+        
+        # Map zipWRUext column names to our standard format
+        column_map = {
+            'pred.whi': 'white',
+            'pred.bla': 'black',
+            'pred.his': 'hispanic',
+            'pred.asi': 'api',
+            'pred.oth': 'other',
+        }
+        
+        # Rename columns if they exist
+        for old_col, new_col in column_map.items():
+            if old_col in result_df.columns:
+                result_df[new_col] = result_df[old_col]
+        
+        # Ensure all expected race columns exist
+        for race in RACE_COLS:
+            if race not in result_df.columns:
+                result_df[race] = 0.0
+
+        # Generate race label
+        result_df = self.generate_race_label(result_df)
+        
+        return result_df
     
 class cBISGPredictor(ProxyPredictor):
     """
