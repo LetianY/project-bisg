@@ -6,6 +6,7 @@ from sklearn.metrics import confusion_matrix, accuracy_score
 from const import constants
 from zip_codes import df_zip_crosswalk, df_reverse_zcta_crosswalk
 from surgeo.models.base_model import BaseModel
+from joblib import Parallel, delayed
 
 
 # configure constants: WRU
@@ -178,6 +179,43 @@ def add_noise_to_surnames(df, alpha=0.05, noise_str='xyz', seed=None):
     indices_to_perturb = np.random.choice(df.index, size=n_perturb, replace=False)
     df.loc[indices_to_perturb, 'surname'] = df.loc[indices_to_perturb, 'surname'] + noise_str
     return df
+
+def get_zip_in_range(zcta, zctas, distances, dist_min, dist_max):
+    index = zctas.index(zcta)
+    (distances[index, :] >= dist_min) & ((distances[index, :] <= dist_max))
+    return zctas[np.random.choice(np.nonzero((distances[index, :] >= dist_min) & (distances[index, :] <= dist_max))[0], 1)[0]]
+
+def get_zip_with_error(zcta, zctas, distances, err_distances, err_probs):
+    dist_max_idx = np.random.choice(np.arange(len(err_distances)), p=err_probs)
+    dist_max = err_distances[dist_max_idx]
+    if dist_max_idx == 0:
+        dist_min = 0
+    else:
+        dist_min = err_distances[dist_max_idx-1]
+    return get_zip_in_range(zcta, zctas, distances, dist_min, dist_max)
+
+def perturb_zcta(df, gamma=0.05, seed=None, **perturb_kwargs):
+    if seed is not None:
+        np.random.seed(seed)
+
+    n_samples = len(df)
+    n_perturb = int(gamma * n_samples)
+
+    indices_to_perturb = np.random.choice(df.index, size=n_perturb, replace=False)
+
+    zctas_to_perturb = df.loc[indices_to_perturb, 'zcta'].unique().tolist()
+
+    # parallel create a map: zcta -> perturbed_zcta
+    perturbed_zctas = Parallel(n_jobs=-1)(
+        delayed(get_zip_with_error)(zcta, **perturb_kwargs) for zcta in zctas_to_perturb
+    )
+    zcta_perturb_map = dict(zip(zctas_to_perturb, perturbed_zctas))
+
+    df['perturbed_zcta'] = df['zcta']
+    df.loc[indices_to_perturb, 'perturbed_zcta'] = df.loc[indices_to_perturb, 'zcta'].map(zcta_perturb_map)
+
+    return df
+
 
 def compute_ece(y_true, y_probs, n_bins=10):
     """
