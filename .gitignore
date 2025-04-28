@@ -14,6 +14,7 @@ references/zip-codes-perturbance/bisg_env/*
 # ignore data files which are too large
 data/*
 references/zip-codes-perturbance/zip_to_zip_distances.npy
+/references/proxies/data/voters/*
 
 # ignore secrets
 secrets/*
