@@ -1,0 +1,22 @@
+name: zrp_env
+channels:
+  - conda-forge
+  - defaults
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - python=3.8
+  - pandas=1.2.5
+  - scikit-learn=1.0.2
+  - pyarrow=7.0.0
+  - numpy
+  - joblib=1.2.0
+  - fastparquet
+  - pip
+  - pip:
+      - zrp==0.4.1
+      - category-encoders==2.3.0
+      - feature-engine==1.2.0
+      - pycm==3.3
+      - plac==1.3.4
+      - CensusData==1.15
